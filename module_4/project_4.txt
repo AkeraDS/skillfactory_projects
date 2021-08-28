@@ -205,49 +205,43 @@ WITH flights_info AS
                                                          '2017-02-01',
                                                          '2017-12-01'))
      AND f.status not in ('Cancelled') ),
-     ticket_class AS
-  (SELECT tf.flight_id,
+flight_analysis AS
+  (SELECT f.flight_id,
+          sum(tf.amount) AS amount_tickets,
+          count(DISTINCT tf.ticket_no) AS purchased_tickets,
+          DATE_PART('minute', f.actual_arrival-f.actual_departure) + DATE_PART('hour', f.actual_arrival-f.actual_departure) * 60 AS minute_in_way,
           count(CASE
                     WHEN tf.fare_conditions='Business' THEN tf.fare_conditions
                 END) AS business,
           count(CASE
                     WHEN tf.fare_conditions='Economy' THEN tf.fare_conditions
                 END) AS economy
-   FROM dst_project.ticket_flights AS tf
-   GROUP BY 1),
-     flight_analysis AS
-  (SELECT f.flight_id,
-          sum(tf.amount) AS amount_tickets,
-          count(DISTINCT tf.ticket_no) AS purchased_tickets,
-          count(DISTINCT s.seat_no) count_seats,
-          DATE_PART('minute', f.actual_arrival-f.actual_departure) + DATE_PART('hour', f.actual_arrival-f.actual_departure) * 60 AS minute_in_way
    FROM dst_project.flights AS f
    JOIN dst_project.ticket_flights AS tf ON f.flight_id=tf.flight_id
-   JOIN dst_project.seats AS s ON s.aircraft_code=f.aircraft_code
    WHERE f.departure_airport = 'AAQ'
      AND (date_trunc('month', f.scheduled_departure) in ('2017-01-01',
                                                          '2017-02-01',
                                                          '2017-12-01'))
      AND f.status not in ('Cancelled')
    GROUP BY 1),
-     fuel_cons AS
+fuel_cons AS
   (SELECT fa.flight_id,
           CASE fi.model
-              WHEN 'Boeing 737-300' THEN fa.minute_in_way*40*41435 --расход Boeing 737-300 и Sukhoi Superjet-100 рассчитанный по формуле:
-              WHEN 'Sukhoi Superjet-100' THEN fa.minute_in_way*28.3*41435 -- количество_минут_в_пути*расход_топлива_в_минуту*цена_топлива
+              WHEN 'Boeing 737-300' THEN fa.minute_in_way*40*41.435 --расход Boeing 737-300 и Sukhoi Superjet-100 рассчитанный по формуле:
+
+              WHEN 'Sukhoi Superjet-100' THEN fa.minute_in_way*28.3*41.435 -- количество_минут_в_пути*расход_топлива_в_минуту*цена_топлива
+
           END AS fuel_consumption
    FROM flights_info AS fi
    JOIN flight_analysis AS fa ON fa.flight_id=fi.flight_id)
-   
 SELECT fi.flight_id,
        fi.actual_departure,
        fi.departure_city,
        fi.arrival_city,
        fi.model,
        fa.purchased_tickets,
-       fa.count_seats-fa.purchased_tickets AS count_free_seats,
-       tc.business,
-       tc.economy,
+       fa.business,
+       fa.economy,
        fa.amount_tickets,
        fa.minute_in_way,
        fc.fuel_consumption,
@@ -255,5 +249,4 @@ SELECT fi.flight_id,
 FROM flights_info AS fi
 JOIN flight_analysis AS fa ON fa.flight_id=fi.flight_id
 JOIN fuel_cons AS fc ON fc.flight_id=fi.flight_id
-JOIN ticket_class AS tc ON tc.flight_id=fi.flight_id
 ORDER BY profit
