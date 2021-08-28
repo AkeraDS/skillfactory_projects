@@ -1,0 +1,252 @@
+4.1
+SELECT a.city,
+       count(a.airport_code)
+FROM dst_project.airports AS a
+GROUP BY 1,
+         a.timezone
+HAVING count(a.airport_code)>1
+ORDER BY 2 DESC
+
+
+
+4.2.1
+SELECT count(DISTINCT f.status)
+FROM dst_project.flights AS f
+
+
+4.2.2
+SELECT count(*)
+FROM dst_project.flights AS f
+WHERE f.status = 'Departed'
+
+
+4.2.3
+SELECT a.aircraft_code,
+       a.model,
+       count(s.seat_no)
+FROM dst_project.aircrafts AS a
+JOIN dst_project.seats AS s ON a.aircraft_code=s.aircraft_code
+WHERE a.aircraft_code = '773'
+GROUP BY 1
+
+
+4.2.4
+SELECT count(flight_id)
+FROM dst_project.flights AS f
+WHERE f.actual_arrival > to_date('01.04.2017', 'DD.MM.YYYY')
+  AND f.actual_departure < to_date('01.09.2017', 'DD.MM.YYYY')
+  AND f.status = 'Arrived'
+
+
+
+4.3.1
+SELECT count(flight_id)
+FROM dst_project.flights AS f
+WHERE f.status = 'Cancelled'
+
+
+4.3.2
+SELECT 'Boeing' AS model,
+       count(*)
+FROM dst_project.aircrafts AS a
+WHERE a.model like 'Boeing%'
+UNION
+SELECT 'Sukhoi Superjet',
+       count(*)
+FROM dst_project.aircrafts AS a
+WHERE a.model like 'Sukhoi Superjet%'
+UNION
+SELECT 'Airbus ',
+       count(*)
+FROM dst_project.aircrafts AS a
+WHERE a.model like 'Airbus%'
+
+
+4.3.3
+SELECT 'Europe' AS "zone",
+       count(*)
+FROM dst_project.airports AS a
+WHERE a.timezone like 'Europe%'
+UNION
+SELECT 'Asia' AS "zone",
+       count(*)
+FROM dst_project.airports AS a
+WHERE a.timezone like 'Asia%'
+UNION
+SELECT 'Australia' AS "zone",
+       count(*)
+FROM dst_project.airports AS a
+WHERE a.timezone like 'Australia%'
+
+
+4.3.4
+SELECT f.flight_id
+FROM dst_project.flights AS f
+ORDER BY f.scheduled_arrival-f.actual_arrival
+LIMIT 1
+
+
+
+4.4.1
+SELECT min(f.scheduled_departure)
+FROM dst_project.flights AS f
+
+
+4.4.2
+SELECT DATE_PART('minute', f.scheduled_arrival-f.scheduled_departure) + DATE_PART('hour', f.scheduled_arrival-f.scheduled_departure) * 60
+FROM dst_project.flights AS f
+ORDER BY 1 DESC
+LIMIT 1
+
+
+4.4.3
+SELECT DISTINCT f.departure_airport,
+                f.arrival_airport,
+                f.scheduled_arrival-f.scheduled_departure
+FROM dst_project.flights AS f
+WHERE f.status = 'Scheduled'
+ORDER BY f.scheduled_arrival-f.scheduled_departure DESC
+LIMIT 1
+
+
+4.4.4
+SELECT avg(DATE_PART('minute', f.scheduled_arrival-f.scheduled_departure) + DATE_PART('hour', f.scheduled_arrival-f.scheduled_departure) * 60)::int
+FROM dst_project.flights AS f
+ORDER BY 1 DESC
+
+
+
+4.5.1
+SELECT s.fare_conditions,
+       count(*)
+FROM dst_project.seats AS s
+WHERE s.aircraft_code='SU9'
+GROUP BY 1
+ORDER BY 2 DESC
+
+
+4.5.2
+SELECT min(b.total_amount)
+FROM dst_project.bookings AS b
+
+
+4.5.3
+SELECT bd.seat_no
+FROM dst_project.tickets AS t
+JOIN dst_project.boarding_passes AS bd ON bd.ticket_no = t.ticket_no
+WHERE t.passenger_id = '4313 788533'
+
+
+
+
+5.1
+SELECT count(f.flight_id)
+FROM dst_project.flights AS f
+JOIN dst_project.airports AS a ON f.arrival_airport=a.airport_code
+WHERE date_part('year', f.scheduled_arrival)=2017
+  AND a.city = 'Anapa'
+  AND f.status = 'Arrived'
+GROUP BY a.city
+
+
+5.2
+SELECT count(*)
+FROM dst_project.flights AS f
+JOIN dst_project.airports AS a ON f.departure_airport=a.airport_code
+WHERE date_part('month', f.scheduled_departure) in (1, 2, 12)
+  AND a.city = 'Anapa'
+  AND date_part('year', f.scheduled_departure) = 2017
+
+
+5.3
+SELECT count(*)
+FROM dst_project.flights AS f
+JOIN dst_project.airports AS a ON f.departure_airport=a.airport_code
+WHERE f.status = 'Cancelled'
+  AND a.city = 'Anapa'
+
+
+5.4
+SELECT count(*)
+FROM dst_project.flights AS f
+JOIN dst_project.airports AS a ON f.departure_airport=a.airport_code
+JOIN dst_project.airports AS air ON f.arrival_airport = air.airport_code
+WHERE a.city='Anapa'
+  AND air.city != 'Moscow'
+
+
+5.5
+SELECT a.model
+FROM dst_project.aircrafts AS a
+JOIN dst_project.seats AS s ON a.aircraft_code = s.aircraft_code
+JOIN dst_project.flights AS f ON f.aircraft_code = a.aircraft_code
+JOIN dst_project.airports AS air ON air.airport_code = f.departure_airport
+WHERE air.city='Anapa'
+GROUP BY 1
+ORDER BY count(DISTINCT s.seat_no) DESC
+LIMIT 1
+
+
+
+
+6
+WITH flights_info AS
+  (SELECT f.flight_id,
+          a.model,
+          f.actual_departure,
+          air.city AS departure_city,
+          ai.city AS arrival_city
+   FROM dst_project.flights AS f
+   JOIN dst_project.aircrafts AS a ON f.aircraft_code=a.aircraft_code
+   JOIN dst_project.airports AS air ON f.departure_airport = air.airport_code
+   JOIN dst_project.airports AS ai ON f.arrival_airport = ai.airport_code
+   WHERE f.departure_airport = 'AAQ'
+     AND (date_trunc('month', f.scheduled_departure) in ('2017-01-01',
+                                                         '2017-02-01',
+                                                         '2017-12-01'))
+     AND f.status not in ('Cancelled') ),
+flight_analysis AS
+  (SELECT f.flight_id,
+          sum(tf.amount) AS amount_tickets,
+          count(DISTINCT tf.ticket_no) AS purchased_tickets,
+          DATE_PART('minute', f.actual_arrival-f.actual_departure) + DATE_PART('hour', f.actual_arrival-f.actual_departure) * 60 AS minute_in_way,
+          count(CASE
+                    WHEN tf.fare_conditions='Business' THEN tf.fare_conditions
+                END) AS business,
+          count(CASE
+                    WHEN tf.fare_conditions='Economy' THEN tf.fare_conditions
+                END) AS economy
+   FROM dst_project.flights AS f
+   JOIN dst_project.ticket_flights AS tf ON f.flight_id=tf.flight_id
+   WHERE f.departure_airport = 'AAQ'
+     AND (date_trunc('month', f.scheduled_departure) in ('2017-01-01',
+                                                         '2017-02-01',
+                                                         '2017-12-01'))
+     AND f.status not in ('Cancelled')
+   GROUP BY 1),
+fuel_cons AS
+  (SELECT fa.flight_id,
+          CASE fi.model
+              WHEN 'Boeing 737-300' THEN fa.minute_in_way*40*41.435 --расход Boeing 737-300 и Sukhoi Superjet-100 рассчитанный по формуле:
+
+              WHEN 'Sukhoi Superjet-100' THEN fa.minute_in_way*28.3*41.435 -- количество_минут_в_пути*расход_топлива_в_минуту*цена_топлива
+
+          END AS fuel_consumption
+   FROM flights_info AS fi
+   JOIN flight_analysis AS fa ON fa.flight_id=fi.flight_id)
+SELECT fi.flight_id,
+       fi.actual_departure,
+       fi.departure_city,
+       fi.arrival_city,
+       fi.model,
+       fa.purchased_tickets,
+       fa.business,
+       fa.economy,
+       fa.amount_tickets,
+       fa.minute_in_way,
+       fc.fuel_consumption,
+       fa.amount_tickets-fc.fuel_consumption AS profit
+FROM flights_info AS fi
+JOIN flight_analysis AS fa ON fa.flight_id=fi.flight_id
+JOIN fuel_cons AS fc ON fc.flight_id=fi.flight_id
+ORDER BY profit
